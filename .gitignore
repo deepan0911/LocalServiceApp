@@ -1,0 +1,20 @@
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+build/
+*.g.dart
+pubspec.lock
+android/local.properties
+ios/Pods/
+ios/.symlinks/
+*.keystore
+google-services.json
+GoogleService-Info.plist
+
+# Backend
+backend/.env
+backend/node_modules/
+backend/logs/
+**/node_modules/
+**/.env
