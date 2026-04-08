@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:firebase_auth/firebase_auth.dart' hide AuthProvider;
+import 'package:provider/provider.dart';
+import '../main.dart'; // To access AuthProvider and ApiClient
+import 'dart:async';
 import 'dart:io';
 
 // Colors reused from main.dart
@@ -34,6 +38,129 @@ class _WorkerRegisterScreenState extends State<WorkerRegisterScreen> {
   final _streetCtrl  = TextEditingController();
   final _cityCtrl    = TextEditingController();
   bool _obscure = true;
+
+  // Verification States
+  bool _emailVerified = false;
+  bool _phoneVerified = false;
+  String? _verificationId;
+  int _emailTimer = 0;
+  int _phoneTimer = 0;
+  Timer? _timer;
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  void _startTimer(bool isEmail) {
+    if (isEmail) _emailTimer = 60; else _phoneTimer = 60;
+    _timer?.cancel();
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      setState(() {
+        if (_emailTimer > 0) _emailTimer--;
+        if (_phoneTimer > 0) _phoneTimer--;
+        if (_emailTimer == 0 && _phoneTimer == 0) timer.cancel();
+      });
+    });
+  }
+
+  Future<void> _sendEmailOtp() async {
+    final email = _emailCtrl.text.trim();
+    if (email.isEmpty || !email.contains('@')) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter a valid email')));
+      return;
+    }
+    final success = await context.read<AuthProvider>().sendEmailOtp(email);
+    if (success) {
+      _startTimer(true);
+      _showOtpDialog(true);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.read<AuthProvider>().error ?? 'Error sending OTP')));
+    }
+  }
+
+  Future<void> _sendPhoneOtp() async {
+    final phone = _phoneCtrl.text.trim();
+    if (phone.isEmpty || phone.length < 10) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter a valid phone number')));
+      return;
+    }
+    
+    String phoneNumber = phone.startsWith('+') ? phone : '+91$phone';
+
+    await FirebaseAuth.instance.verifyPhoneNumber(
+      phoneNumber: phoneNumber,
+      verificationCompleted: (PhoneAuthCredential credential) async {
+        await FirebaseAuth.instance.signInWithCredential(credential);
+        setState(() => _phoneVerified = true);
+      },
+      verificationFailed: (FirebaseAuthException e) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message ?? 'Verification failed')));
+      },
+      codeSent: (String verId, int? resendToken) {
+        setState(() => _verificationId = verId);
+        _startTimer(false);
+        _showOtpDialog(false);
+      },
+      codeAutoRetrievalTimeout: (String verId) {
+        _verificationId = verId;
+      },
+    );
+  }
+
+  void _showOtpDialog(bool isEmail) {
+    final ctrl = TextEditingController();
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: Text('Verify ${isEmail ? 'Email' : 'Phone'}'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Enter the 6-digit code sent to ${isEmail ? _emailCtrl.text : _phoneCtrl.text}'),
+            const SizedBox(height: 16),
+            TextField(
+              controller: ctrl,
+              keyboardType: TextInputType.number,
+              maxLength: 6,
+              decoration: const InputDecoration(hintText: '000000'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () async {
+              if (isEmail) {
+                final success = await context.read<AuthProvider>().verifyEmailOtp(_emailCtrl.text.trim(), ctrl.text.trim());
+                if (success) {
+                  setState(() => _emailVerified = true);
+                  Navigator.pop(ctx);
+                } else {
+                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.read<AuthProvider>().error ?? 'Invalid OTP')));
+                }
+              } else {
+                try {
+                  PhoneAuthCredential credential = PhoneAuthProvider.credential(
+                    verificationId: _verificationId!,
+                    smsCode: ctrl.text.trim(),
+                  );
+                  await FirebaseAuth.instance.signInWithCredential(credential);
+                  setState(() => _phoneVerified = true);
+                  Navigator.pop(ctx);
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Invalid SMS OTP')));
+                }
+              }
+            },
+            child: const Text('Verify'),
+          ),
+        ],
+      ),
+    );
+  }
   final _p1Key = GlobalKey<FormState>();
 
   // Page 2: Skills
@@ -52,7 +179,13 @@ class _WorkerRegisterScreenState extends State<WorkerRegisterScreen> {
   final _picker = ImagePicker();
 
   void _next() {
-    if (_page == 0 && !_p1Key.currentState!.validate()) return;
+    if (_page == 0) {
+      if (!_p1Key.currentState!.validate()) return;
+      if (!_emailVerified || !_phoneVerified) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please verify both email and phone number')));
+        return;
+      }
+    }
     if (_page == 1) {
       if (_selectedSkills.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Select at least one skill'), backgroundColor: _warning));
@@ -110,7 +243,7 @@ class _WorkerRegisterScreenState extends State<WorkerRegisterScreen> {
         if (_additionalId != null) 'additionalId': await _toFile(_additionalId!, 'additional_id.jpg'),
       });
 
-      final dio = Dio(BaseOptions(baseUrl: kIsWeb ? 'http://localhost:5000/api' : 'http://192.168.29.204:5000/api'));
+      final dio = Dio(BaseOptions(baseUrl: 'https://local-service-backend-k2aq.onrender.com/api'));
       await dio.post('/auth/register-worker', data: formData);
 
       if (!mounted) return;
@@ -176,8 +309,45 @@ class _WorkerRegisterScreenState extends State<WorkerRegisterScreen> {
     padding: const EdgeInsets.all(24),
     child: Form(key: _p1Key, child: Column(children: [
       _field(_nameCtrl,  'Full Name',    Icons.person_outline,   validator: _req),
-      _field(_emailCtrl, 'Email',        Icons.email_outlined,   type: TextInputType.emailAddress, validator: (v) => v?.contains('@') != true ? 'Valid email required' : null),
-      _field(_phoneCtrl, 'Phone Number', Icons.phone_outlined,   type: TextInputType.phone, validator: (v) => (v?.length ?? 0) < 10 ? 'Valid phone required' : null),
+      
+      // Email Field with Verify
+      Padding(
+        padding: const EdgeInsets.only(bottom: 14),
+        child: TextFormField(
+          controller: _emailCtrl,
+          keyboardType: TextInputType.emailAddress,
+          enabled: !_emailVerified,
+          decoration: _dec('Email', Icons.email_outlined).copyWith(
+            suffixIcon: _emailVerified
+                ? const Icon(Icons.check_circle, color: _success)
+                : TextButton(
+                    onPressed: _emailTimer > 0 ? null : _sendEmailOtp,
+                    child: Text(_emailTimer > 0 ? '${_emailTimer}s' : 'Verify'),
+                  ),
+          ),
+          validator: (v) => v?.contains('@') != true ? 'Valid email required' : null,
+        ),
+      ),
+
+      // Phone Field with Verify
+      Padding(
+        padding: const EdgeInsets.only(bottom: 14),
+        child: TextFormField(
+          controller: _phoneCtrl,
+          keyboardType: TextInputType.phone,
+          enabled: !_phoneVerified,
+          decoration: _dec('Phone Number', Icons.phone_outlined).copyWith(
+            suffixIcon: _phoneVerified
+                ? const Icon(Icons.check_circle, color: _success)
+                : TextButton(
+                    onPressed: _phoneTimer > 0 ? null : _sendPhoneOtp,
+                    child: Text(_phoneTimer > 0 ? '${_phoneTimer}s' : 'Verify'),
+                  ),
+          ),
+          validator: (v) => (v?.length ?? 0) < 10 ? 'Valid phone required' : null,
+        ),
+      ),
+
       _field(_passCtrl,  'Password',     Icons.lock_outline,     obscure: true, validator: (v) => (v?.length ?? 0) < 6 ? 'Min 6 chars' : null),
       _field(_streetCtrl,'Street / Area',Icons.location_on_outlined, validator: _req),
       _field(_cityCtrl,  'City',         Icons.location_city_outlined, validator: _req),

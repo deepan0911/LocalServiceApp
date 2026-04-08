@@ -20,7 +20,7 @@ class ChatProvider extends ChangeNotifier {
   Future<void> connectSocket() async {
     final token = await _storage.read(key: 'auth_token');
     _socket = IO.io(
-      'http://192.168.29.204:5000', // Real Device IP
+      'https://local-service-backend-k2aq.onrender.com',
       IO.OptionBuilder()
           .setTransports(['websocket'])
           .setAuth({'token': token})

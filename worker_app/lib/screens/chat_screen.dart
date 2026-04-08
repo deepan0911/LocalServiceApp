@@ -61,7 +61,7 @@ class _WorkerChatScreenState extends State<WorkerChatScreen> {
 
     // Load history via REST
     try {
-      final dio = Dio(BaseOptions(baseUrl: kIsWeb ? 'http://localhost:5000/api' : 'http://192.168.29.204:5000/api'));
+      final dio = Dio(BaseOptions(baseUrl: 'https://local-service-backend-k2aq.onrender.com/api'));
       dio.options.headers['Authorization'] = 'Bearer $token';
       final res = await dio.get('/chat/${widget.bookingId}');
       final data = res.data['data'] as List;
@@ -74,7 +74,7 @@ class _WorkerChatScreenState extends State<WorkerChatScreen> {
     }
 
     // Connect socket
-    _socket = IO.io(kIsWeb ? 'http://localhost:5000' : 'http://192.168.29.204:5000',
+    _socket = IO.io('https://local-service-backend-k2aq.onrender.com',
         IO.OptionBuilder().setTransports(['websocket']).setAuth({'token': token}).build());
     _socket!.onConnect((_) {
       _socket!.emit('join_booking', {'bookingId': widget.bookingId});
@@ -108,7 +108,7 @@ class _WorkerChatScreenState extends State<WorkerChatScreen> {
     final file = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 70);
     if (file == null) return;
     final token = await _storage.read(key: 'auth_token');
-    final dio = Dio(BaseOptions(baseUrl: kIsWeb ? 'http://localhost:5000/api' : 'http://192.168.29.204:5000/api'));
+    final dio = Dio(BaseOptions(baseUrl: 'https://local-service-backend-k2aq.onrender.com/api'));
     dio.options.headers['Authorization'] = 'Bearer $token';
     final formData = FormData.fromMap({
       'image': kIsWeb 

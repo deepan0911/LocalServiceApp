@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -80,7 +81,7 @@ ThemeData get workerTheme => ThemeData(
 // API CLIENT
 // ═══════════════════════════════════════════════════════
 class ApiClient {
-  static const baseUrl = kIsWeb ? 'http://localhost:5000/api' : 'http://192.168.29.204:5000/api';
+  static const baseUrl = 'https://local-service-backend-k2aq.onrender.com/api';
   static final _storage = FlutterSecureStorage();
   static late Dio dio;
 
@@ -188,6 +189,28 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  Future<bool> sendEmailOtp(String email) async {
+    _isLoading = true; _error = null; notifyListeners();
+    try {
+      await ApiClient.dio.post('/auth/send-email-otp', data: {'email': email});
+      _isLoading = false; notifyListeners(); return true;
+    } on DioException catch (e) {
+      _error = e.response?.data['message'] ?? 'Failed to send OTP';
+      _isLoading = false; notifyListeners(); return false;
+    }
+  }
+
+  Future<bool> verifyEmailOtp(String email, String otp) async {
+    _isLoading = true; _error = null; notifyListeners();
+    try {
+      await ApiClient.dio.post('/auth/verify-email-otp', data: {'email': email, 'otp': otp});
+      _isLoading = false; notifyListeners(); return true;
+    } on DioException catch (e) {
+      _error = e.response?.data['message'] ?? 'OTP verification failed';
+      _isLoading = false; notifyListeners(); return false;
+    }
+  }
+
   Future<void> loadWorkerProfile() async {
     try {
       final res = await ApiClient.dio.get('/workers/me');
@@ -250,6 +273,20 @@ class BookingProvider extends ChangeNotifier {
 // ═══════════════════════════════════════════════════════
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  try {
+    // Note: For Web, you MUST provide FirebaseOptions.
+    // Run 'flutterfire configure' or fill in your details below.
+    await Firebase.initializeApp(
+      options: kIsWeb ? const FirebaseOptions(
+        apiKey: "REPLACE_WITH_YOUR_KEY",
+        appId: "REPLACE_WITH_YOUR_ID",
+        messagingSenderId: "REPLACE_WITH_YOUR_SENDER_ID",
+        projectId: "REPLACE_WITH_YOUR_PROJECT_ID",
+      ) : null,
+    );
+  } catch (e) {
+    debugPrint("Firebase initialization failed: $e");
+  }
   ApiClient.init();
   runApp(const WorkerApp());
 }

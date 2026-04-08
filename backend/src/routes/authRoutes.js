@@ -1,9 +1,11 @@
 const express = require('express');
 const router = express.Router();
-const { registerCustomer, registerWorker, login, getMe, updateFcmToken } = require('../controllers/authController');
+const { registerCustomer, registerWorker, login, getMe, updateFcmToken, sendEmailOtp, verifyEmailOtp } = require('../controllers/authController');
 const { protect } = require('../middleware/auth');
 const { upload } = require('../config/cloudinary');
 
+router.post('/send-email-otp', sendEmailOtp);
+router.post('/verify-email-otp', verifyEmailOtp);
 router.post('/register', registerCustomer);
 router.post(
   '/register-worker',

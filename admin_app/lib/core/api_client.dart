@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class ApiClient {
-  static const String baseUrl = kIsWeb ? 'http://localhost:5000/api' : 'http://192.168.29.204:5000/api';
+  static const String baseUrl = 'https://local-service-backend-k2aq.onrender.com/api';
   static final _storage = const FlutterSecureStorage();
   static late Dio dio;
 

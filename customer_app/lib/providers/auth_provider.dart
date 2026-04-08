@@ -46,6 +46,40 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  Future<bool> sendEmailOtp(String email) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+    try {
+      await ApiClient.dio.post('/auth/send-email-otp', data: {'email': email});
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } on DioException catch (e) {
+      _error = e.response?.data['message'] ?? 'Failed to send OTP';
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> verifyEmailOtp(String email, String otp) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+    try {
+      await ApiClient.dio.post('/auth/verify-email-otp', data: {'email': email, 'otp': otp});
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } on DioException catch (e) {
+      _error = e.response?.data['message'] ?? 'OTP verification failed';
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
   Future<bool> register({
     required String name,
     required String email,
